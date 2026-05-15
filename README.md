@@ -23,7 +23,7 @@ A full-stack TypeScript project for managing affiliate accounts with unified pro
 ### Dashboard (`/dashboard`)
 - `/src/components` — React components
 - `/src/pages` — Page components
-- `/src/api` — API client
+- `/src/api` — API client with axios configuration
 - `App.tsx` — Main app component
 - `main.tsx` — Vite entry point
 - Tailwind CSS configuration
@@ -92,6 +92,19 @@ A full-stack TypeScript project for managing affiliate accounts with unified pro
 - `GET /api/jobs/:id` — Get job status
 - `POST /api/jobs/:id/cancel` — Cancel job
 
+#### Internal Discovery & Publishing (Dashboard Integration)
+- `POST /api/internal/discover` — Discover new products from affiliate networks
+  - Request: `{ "source": "amazon" | "aliexpress", "category": "string" }`
+  - Response: `{ "count": number, "products": Product[] }`
+  
+- `POST /api/internal/refresh` — Refresh/update existing product data
+  - Request: `{ "productIds": string[], "force": boolean }`
+  - Response: `{ "updated": number, "failed": number, "details": object[] }`
+  
+- `POST /api/internal/publish` — Publish discovered products to affiliate platforms
+  - Request: `{ "productIds": string[], "target": "amazon" | "aliexpress", "schedule": "immediate" | "scheduled" }`
+  - Response: `{ "published": number, "failed": number, "queueId": string }`
+
 ### External Services & Integrations
 
 | Service | Purpose | Configuration |
@@ -142,6 +155,9 @@ SMTP_PASS=email_password
 VITE_API_URL=http://localhost:3000
 VITE_WS_URL=ws://localhost:3000/ws
 VITE_ENV=development
+
+# Backend Base URL for Axios
+VITE_BACKEND_URL=http://localhost:3000
 ```
 
 ## Installation & Setup
@@ -200,6 +216,40 @@ npm run preview
 # Preview runs on http://localhost:4173
 ```
 
+## Dashboard API Client Setup
+
+The dashboard uses Axios for API communication. Configure it in `/dashboard/src/api/`:
+
+```typescript
+import axios from 'axios';
+
+export const api = axios.create({
+  baseURL: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/api'
+});
+
+// Add request interceptor for authentication
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('authToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Handle unauthorized
+      localStorage.removeItem('authToken');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+```
+
 ## Testing Deployed Settings
 
 ### 1. Backend Health Check
@@ -226,20 +276,45 @@ curl -X GET http://localhost:3000/api/aliexpress/products
 # Expected response: Array of products from AliExpress API
 ```
 
-### 5. Verify Dashboard
+### 5. Test Product Discovery
+```bash
+curl -X POST http://localhost:3000/api/internal/discover \
+  -H "Content-Type: application/json" \
+  -d '{"source": "amazon", "category": "electronics"}'
+# Expected response: { "count": N, "products": [...] }
+```
+
+### 6. Test Product Refresh
+```bash
+curl -X POST http://localhost:3000/api/internal/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"productIds": ["id1", "id2"], "force": false}'
+# Expected response: { "updated": N, "failed": N, "details": [...] }
+```
+
+### 7. Test Product Publishing
+```bash
+curl -X POST http://localhost:3000/api/internal/publish \
+  -H "Content-Type: application/json" \
+  -d '{"productIds": ["id1"], "target": "amazon", "schedule": "immediate"}'
+# Expected response: { "published": N, "failed": N, "queueId": "..." }
+```
+
+### 8. Verify Dashboard
 - Navigate to `http://localhost:5173`
 - Check browser console (F12) for errors
 - Verify API connectivity in Network tab
 
-### 6. Monitor Background Jobs
+### 9. Monitor Background Jobs
 ```bash
 curl -X GET http://localhost:3000/api/jobs
 # Expected response: Array of background jobs
 ```
 
-### 7. Check Logs
+### 10. Check Logs
 ```bash
-# Backend development logs appear in terminal
+# Backend development logs appear in Terminal 1
+# Dashboard development logs appear in Terminal 2
 # Watch for any errors related to:
 grep "amazon" logs/app.log
 grep "aliexpress" logs/app.log
@@ -258,6 +333,7 @@ grep "error" logs/app.log
 - Database query performance
 - Amazon API sync success rate
 - AliExpress API sync success rate
+- Product discovery performance
 - Memory and CPU usage
 
 ### Common Issues & Troubleshooting
@@ -270,11 +346,19 @@ grep "error" logs/app.log
 **Issue: Amazon API returns 403**
 - Verify `AMAZON_ACCESS_KEY`, `AMAZON_SECRET_KEY`, `AMAZON_PARTNER_TAG`
 - Check credentials have correct permissions
+- Verify Partner Tag is associated with correct affiliate account
 
 **Issue: Dashboard can't connect to backend**
 - Verify backend is running on port 3000
-- Check `VITE_API_URL` is set correctly
+- Check `VITE_BACKEND_URL` is set correctly in `.env`
 - Ensure CORS is enabled in backend
+- Check browser Network tab for failed requests
+
+**Issue: Product discovery returns empty**
+- Verify API credentials are valid
+- Check rate limits aren't exceeded
+- Ensure categories are correct
+- Check backend logs for API errors
 
 **Issue: Build fails**
 - Clear `node_modules`: `rm -rf node_modules && npm install`
@@ -308,6 +392,7 @@ npm run type-check # Type check
 
 - **Local API**: `http://localhost:3000`
 - **Local Dashboard**: `http://localhost:5173`
+- **API Docs**: Check `/src/routes` for endpoint documentation
 - **Issues**: Report via GitHub Issues
 - **Contributing**: See `CONTRIBUTING.md`
 
