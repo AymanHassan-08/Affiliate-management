@@ -1,5 +1,31 @@
 # Testing Guide for Affiliate Management System
 
+[![CI](https://img.shields.io/github/actions/workflow/status/AymanHassan-08/Affiliate-management/test.yml?branch=main)](https://github.com/AymanHassan-08/Affiliate-management/actions)
+[![Coverage](https://img.shields.io/badge/coverage-unknown-yellow)](#)
+[![Tests](https://img.shields.io/badge/tests-fast%20feedback-brightgreen)](#)
+
+Purpose
+- Who: backend engineers, dashboard developers, QA, and contributors
+- What: how to run, validate, and evolve tests for the product
+- Why: deliver fast feedback, reduce regressions, and keep delivery agile
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Test Structure](#test-1-backend-unit-tests)
+- [Manual Testing](#manual-testing)
+- [API Endpoint Testing](#api-endpoint-testing)
+- [Performance Testing](#performance-testing)
+- [Security Testing](#security-testing)
+- [Continuous Integration](#continuous-integration)
+- [Pull Request Test Checklist](#pull-request-test-checklist)
+- [Test Strategy for Agile Delivery](#test-strategy-for-agile-delivery)
+- [Flaky Tests and Reliability](#flaky-tests-and-reliability)
+- [Troubleshooting](#troubleshooting)
+- [Test Results Reporting](#test-results-reporting)
+- [Best Practices](#best-practices)
+- [Additional Resources](#additional-resources)
+
 ## Quick Start
 
 ### Run All Tests
@@ -20,6 +46,21 @@ bash scripts/test.sh --integration-only
 
 # Skip Docker tests
 bash scripts/test.sh --skip-docker
+```
+
+### Helpful Local Command Patterns
+```bash
+# Quick full validation before push
+bash scripts/test.sh
+
+# Run backend unit and type checks only
+cd backend && npm run lint && npm run type-check && npm run test
+
+# Run dashboard validation
+cd dashboard && npm run type-check && npm run build
+
+# Watch mode for fast iteration
+cd backend && npm run test -- --watch
 ```
 
 ## Test Structure
@@ -63,6 +104,12 @@ npm run test -- --coverage
   - Trends endpoint: `GET /api/trends`
   - Content endpoint: `GET /api/content`
   - Jobs endpoint: `GET /api/jobs`
+
+```bash
+# Example integration run
+cd backend
+npm run test -- --runInBand
+```
 
 ### 7. Docker Tests
 - **Requirements:** Docker and Docker Compose installed
@@ -143,6 +190,12 @@ curl -X POST http://localhost:3000/api/content/generate \
   }'
 ```
 
+### Contract/Behavior Checks
+- Verify status codes: `200`, `201`, `400`, `404`, `500`
+- Validate response schema and required fields
+- Test malformed payloads and edge conditions
+- Confirm CORS and authentication rules for browser-facing routes
+
 ## Performance Testing
 
 ### Load Testing with Apache Bench
@@ -163,6 +216,11 @@ brew install wrk  # macOS
 # Run load test
 wrk -t4 -c100 -d30s http://localhost:3000/health
 ```
+
+### Performance Heuristics
+- Watch for latency spikes when product data grows
+- Validate endpoints under typical production-like request patterns
+- Measure worst-case response times after changes to filtering, aggregation, or pagination
 
 ## Security Testing
 
@@ -188,6 +246,11 @@ curl -H "Origin: http://localhost:5173" \
   -X OPTIONS http://localhost:3000/api/products -v
 ```
 
+### Security Considerations
+- Validate input sanitization for generated content and product data
+- Confirm API routes reject malformed or unauthorized requests
+- Verify secrets are never hard-coded in source or logs
+
 ## Continuous Integration
 
 Tests automatically run on:
@@ -195,8 +258,85 @@ Tests automatically run on:
 - Pull requests
 - Manual workflow dispatch
 
+### Example CI Flow
+```yaml
+name: CI Tests
+on: [push, pull_request]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: cd backend && npm ci && npm run lint && npm run type-check && npm run test -- --coverage
+
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: cd dashboard && npm ci && npm run type-check && npm run build
+```
+
 ### View CI Results
 Check `.github/workflows/test.yml` for detailed test configuration.
+
+## Pull Request Test Checklist
+
+Before requesting review:
+- [ ] `bash scripts/test.sh` completed locally
+- [ ] New features include unit tests and/or integration tests
+- [ ] Type-check and lint pass: `npm run type-check && npm run lint`
+- [ ] Coverage not decreased for modified modules
+- [ ] Error/edge cases are covered
+- [ ] CI passes for backend and dashboard
+- [ ] Manual verification completed for user-visible behavior
+- [ ] Flaky tests were considered and documented
+
+## Test Strategy for Agile Delivery
+
+### Write tests at the right level
+- Unit tests for business logic and edge cases
+- Integration tests for API contracts and data flow
+- End-to-end smoke tests for critical journeys
+- Manual exploratory checks for UX or workflow quality
+
+### Test when it adds confidence
+- New feature or bug fix: write failing test first when practical
+- Refactor without behavior change: preserve expected behavior with regression tests
+- API contract change: update tests and notify dependent consumers
+
+### Fast feedback in an agile team
+- Run the smallest relevant suite first
+- Use watch mode for local iteration
+- Keep CI pipelines parallel and time-boxed
+- Prefer clear, deterministic tests over highly coupled setups
+
+### Creative testing ideas
+- Property-based testing for edge cases in product filters and payload validation
+- Mutation testing to check whether tests actually detect bad changes
+- Visual regression checks for dashboard UI regressions
+- Contract testing between backend API responses and frontend assumptions
+- Fuzz-like input checks for generated content endpoints and request validation
+
+## Flaky Tests and Reliability
+
+### Flaky test policy
+- Treat flaky tests as a production risk
+- Investigate within 24 hours of detection
+- Add a clear issue or owner to each flaky failure
+- Avoid masking real failures with broad retries unless justified
+
+### Reliability tips
+- Prefer deterministic fixtures and seeded test data
+- Avoid sleep-based assertions when a condition can be awaited
+- Minimize shared state between tests
+- Clean up database and temporary files after each run
 
 ## Troubleshooting
 
@@ -235,6 +375,15 @@ docker system prune -a
 docker-compose build --no-cache
 ```
 
+### Test fails intermittently
+```bash
+# Re-run only that suite
+cd backend && npm run test -- --run
+
+# Check for shared state or time-based assumptions
+# Review CI logs and isolate failing test order dependence
+```
+
 ## Test Results Reporting
 
 ### Generate Coverage Report
@@ -250,6 +399,12 @@ open coverage/index.html  # View in browser
 # For CI, check GitHub Actions workflow logs
 ```
 
+### Useful metrics
+- Test pass rate by suite
+- Runtime trends over time
+- Coverage by domain/module
+- Number of flaky tests caught and resolved
+
 ## Best Practices
 
 1. **Run tests before committing**
@@ -261,16 +416,24 @@ open coverage/index.html  # View in browser
    - Run all test suites
    - Check Docker build
    - Verify endpoints
+   - Validate the user story or acceptance criteria
 
 3. **Keep tests updated**
    - Add tests for new features
    - Update tests when APIs change
-   - Review failing tests
+   - Review failing tests immediately
+   - Remove or modernize obsolete tests
 
 4. **Monitor CI/CD**
    - Check GitHub Actions status
    - Fix failing workflows immediately
    - Monitor deployment logs
+   - Measure regression patterns over time
+
+5. **Balance speed and confidence**
+   - Keep unit tests fast and deterministic
+   - Allow slower integration checks to catch cross-system issues
+   - Use a layered testing strategy for sustainable delivery
 
 ## Additional Resources
 
@@ -278,3 +441,7 @@ open coverage/index.html  # View in browser
 - [Express Testing Guide](https://expressjs.com/en/guide/testing.html)
 - [React Testing Library](https://testing-library.com/react)
 - [Docker Compose Documentation](https://docs.docker.com/compose/)
+- [Testing Pyramid](https://martinfowler.com/articles/practical-test-pyramid.html)
+- [Playwright Documentation](https://playwright.dev/)
+- [Fast-check](https://fast-check.dev/)
+
