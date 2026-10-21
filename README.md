@@ -1,13 +1,6 @@
 
-This is the layer that makes MATRIX self‑publishing.
 
-I’ll build it cleanly into your existing backend + dashboard architecture, without touching your deployment pipeline.
-
-Let’s go.
-
----
-
-🔥 MATRIX AI Content Engine (Workspace‑Bound, Multi‑Tenant, Automated)
+- MATRIX AI Content Engine (Workspace‑Bound, Multi‑Tenant, Automated)
 This engine generates:
 
 - Product descriptions  
